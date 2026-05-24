@@ -11,7 +11,6 @@ A [pi](https://pi.dev) coding agent extension that displays the active OpenSpec 
 - **Single-change detailed view** — when one active change exists, shows the change name, schema, per-artifact status (proposal, design, specs, tasks), and a task progress bar with apply dependency hints
 - **Multi-change overview** — when multiple active changes exist, shows a header with the active count followed by one condensed line per change with artifact initials, task counters, and blocked-dependency hints
 - **Artifact status indicators** — uses filled circle (●) for done, open circle (○) for ready, and dotted circle (◌) for blocked, each colored with theme-aware success/muted/warning colors
-- **Dynamic width adaptation** — full artifact names and progress bars on wide terminals (≥120 cols); abbreviated initials and compact counters on narrow terminals (<80 cols)
 - **Interactive dialog** — press `Ctrl+Alt+O` to open a scrollable dialog with full change details, task breakdowns, and dependency info
 - **Automatic data refresh** — fetches from the `openspec` CLI on session start, after each agent turn/end (debounced 500ms), when tools write to `openspec/` or bash commands reference openspec, plus a fallback refresh every 30 seconds
 - **Error resilience** — gracefully shows "CLI not found" when openspec is unavailable, silently no-ops when not in an OpenSpec project, and retains last-known state with a muted error indicator on CLI failures
@@ -108,13 +107,6 @@ OpenSpec (2 active)
 | Not an OpenSpec project | Widget does not render (no-op) |
 | CLI invocation fails | Retains last known state with muted error indicator |
 
-#### Width adaptation
-
-| Width | Behavior |
-|-------|----------|
-| **≥120 columns** | Full artifact names in all modes; progress bar shown in single-change mode |
-| **80–119 columns** | Full names in single-change mode, initials in multi-change mode |
-| **<80 columns** | Abbreviated initials in all modes; progress bar replaced with compact "N/M" counter; change names truncated to fit |
 
 ## Development
 
