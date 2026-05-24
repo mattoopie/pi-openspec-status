@@ -15,6 +15,20 @@ A [pi](https://pi.dev) coding agent extension that displays the active OpenSpec 
 
 ## Install
 
+### From npm (recommended)
+
+```bash
+pi install npm:@mattoopie/pi-openspec-status
+```
+
+Or with a specific version:
+
+```bash
+pi install npm:@mattoopie/pi-openspec-status@0.3.0
+```
+
+### From GitHub
+
 ```bash
 pi install git:github.com/mattoopie/pi-openspec-status
 ```
