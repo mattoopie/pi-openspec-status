@@ -1,6 +1,6 @@
 {
   "name": "pi-openspec-status",
-  "version": "0.3.1",
+  "version": "0.0.1",
   "description": "Pi coding agent extension that displays OpenSpec change status — active change, artifact completion, and task progress — as a persistent TUI widget.",
   "keywords": [
     "pi-package",
