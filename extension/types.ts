@@ -2,6 +2,14 @@
  * Shared type definitions for the OpenSpec Status Widget extension.
  */
 
+/** Represents a task group parsed from tasks.md */
+export interface TaskGroup {
+	name: string;
+	completed: number;
+	total: number;
+	status: "complete" | "partial" | "none" | "empty";
+}
+
 /** Represents an artifact in an OpenSpec change */
 export interface ArtifactStatus {
 	id: string;
@@ -30,6 +38,7 @@ export interface ChangeDetail {
 export interface WidgetState {
 	changes: ChangeSummary[];
 	details: Map<string, ChangeDetail>;
+	taskGroups: Map<string, TaskGroup[]>;
 	error: string | null;
 	lastRefresh: number;
 }

@@ -9,7 +9,7 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import type { WidgetState } from "./types.ts";
+import type { WidgetState, TaskGroup } from "./types.ts";
 import { fetchActiveChanges, checkCliAvailable } from "./openspec.ts";
 import { renderWidget } from "./widget.ts";
 import { registerInteractionShortcut } from "./interaction.ts";
@@ -22,6 +22,7 @@ export default function (pi: ExtensionAPI) {
 	let state: WidgetState = {
 		changes: [],
 		details: new Map(),
+		taskGroups: new Map(),
 		error: null,
 		lastRefresh: 0,
 	};
@@ -58,12 +59,13 @@ export default function (pi: ExtensionAPI) {
 			return;
 		}
 
-		const { changes, details, error } = await fetchActiveChanges(pi);
+		const { changes, details, taskGroups, error } = await fetchActiveChanges(pi);
 
 		// Update state
 		state = {
 			changes,
 			details,
+			taskGroups,
 			error,
 			lastRefresh: Date.now(),
 		};

@@ -11,7 +11,7 @@
 
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { matchesKey, Key, truncateToWidth, visibleWidth, type TUI } from "@earendil-works/pi-tui";
-import type { ChangeSummary, ChangeDetail, OverlayAction } from "./types.ts";
+import type { ChangeSummary, ChangeDetail, TaskGroup, OverlayAction } from "./types.ts";
 import {
 	changeStatusIcon,
 	renderArtifactPart,
@@ -23,6 +23,7 @@ import {
 export class OpenSpecOverlay {
 	private changes: ChangeSummary[];
 	private details: Map<string, ChangeDetail>;
+	private taskGroups: Map<string, TaskGroup[]>;
 	private selectedIndex: number;
 	private theme: Theme;
 	private onAction: (action: OverlayAction) => void;
@@ -35,12 +36,14 @@ export class OpenSpecOverlay {
 	constructor(
 		changes: ChangeSummary[],
 		details: Map<string, ChangeDetail>,
+		taskGroups: Map<string, TaskGroup[]>,
 		theme: Theme,
 		onAction: (action: OverlayAction) => void,
 		error: string | null,
 	) {
 		this.changes = changes;
 		this.details = details;
+		this.taskGroups = taskGroups;
 		this.theme = theme;
 		this.onAction = onAction;
 		this.error = error;
@@ -185,12 +188,55 @@ export class OpenSpecOverlay {
 		const artifactStr = renderArtifactPart(th, detail, true);
 		lines.push(this.renderLine(th.fg("muted", "Artifacts: ") + artifactStr, innerW, th));
 
-		const taskBar = progressBar(th, change.completedTasks, change.totalTasks);
-		const applyHint =
-			detail.applyRequires.length > 0
-				? ` · ${th.fg("muted", `apply: ${detail.applyRequires.join(", ")}`)}`
-				: "";
-		lines.push(this.renderLine(th.fg("muted", "Tasks: ") + taskBar + applyHint, innerW, th));
+		// Check for task group data; if present and non-empty, render groups
+		const groups = this.taskGroups.get(change.name);
+		if (groups && groups.length > 0) {
+			lines.push(this.renderLine(th.fg("muted", "Tasks:"), innerW, th));
+			lines.push(...this.renderTaskGroups(th, groups, innerW));
+		} else {
+			// Flat fallback: progress bar with no apply suffix
+			const taskBar = progressBar(th, change.completedTasks, change.totalTasks);
+			lines.push(this.renderLine(th.fg("muted", "Tasks: ") + taskBar, innerW, th));
+		}
+
+		return lines;
+	}
+
+	/**
+	 * Render task group breakdown lines for the overlay preview pane.
+	 * Each group is rendered on its own line with a status icon and progress counter.
+	 */
+	private renderTaskGroups(th: Theme, groups: TaskGroup[], innerW: number): string[] {
+		const lines: string[] = [];
+
+		for (const group of groups) {
+			let icon: string;
+			switch (group.status) {
+				case "complete":
+					icon = th.fg("success", "●");
+					break;
+				case "partial":
+					icon = th.fg("accent", "◷");
+					break;
+				case "none":
+					icon = th.fg("muted", "○");
+					break;
+				case "empty":
+					icon = th.fg("muted", "—");
+					break;
+			}
+
+			let counter: string;
+			if (group.status === "empty") {
+				counter = th.fg("muted", "— no tasks");
+			} else {
+				counter = th.fg("text", `${group.completed}/${group.total}`);
+			}
+
+			// Truncate group name to fit the available width
+			const line = `  ${icon} ${group.name}: ${counter}`;
+			lines.push(this.renderLine(line, innerW, th));
+		}
 
 		return lines;
 	}

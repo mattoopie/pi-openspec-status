@@ -4,7 +4,8 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import type { ChangeSummary, ChangeDetail } from "./types.ts";
+import type { ChangeSummary, ChangeDetail, TaskGroup } from "./types.ts";
+import { parseTaskGroups } from "./tasks-parser.ts";
 
 /**
  * Result of a CLI availability check.
@@ -118,19 +119,53 @@ export async function getChangeStatus(
 }
 
 /**
- * Fetch all active changes with their detailed status.
+ * Fetch task group data from a change's tasks.md file.
+ * Reads the file from the change directory, parses it, and returns
+ * the extracted task groups. Returns an empty array on any failure
+ * (file missing, read error, parse error).
+ *
+ * @param pi — ExtensionAPI for executing CLI commands
+ * @param changeName — Name of the change (used to locate chang dir)
+ * @returns Parsed TaskGroup array (empty on any failure)
+ */
+export async function fetchTaskGroups(
+	pi: ExtensionAPI,
+	changeName: string,
+): Promise<TaskGroup[]> {
+	try {
+		const result = await pi.exec("cat", [
+			`openspec/changes/${changeName}/tasks.md`,
+		], { timeout: 5000 });
+
+		if (result.code !== 0) return [];
+		if (!result.stdout?.trim()) return [];
+
+		return parseTaskGroups(result.stdout);
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * Fetch all active changes with their detailed status and task group data.
  */
 export async function fetchActiveChanges(
 	pi: ExtensionAPI,
-): Promise<{ changes: ChangeSummary[]; details: Map<string, ChangeDetail>; error: string | null }> {
+): Promise<{
+	changes: ChangeSummary[];
+	details: Map<string, ChangeDetail>;
+	taskGroups: Map<string, TaskGroup[]>;
+	error: string | null;
+}> {
 	// First, get the list of changes
 	const { changes, error: listError } = await listChanges(pi);
 	if (listError) {
-		return { changes: [], details: new Map(), error: listError };
+		return { changes: [], details: new Map(), taskGroups: new Map(), error: listError };
 	}
 
 	// Fetch details for each change
 	const details = new Map<string, ChangeDetail>();
+	const taskGroups = new Map<string, TaskGroup[]>();
 	let fetchError: string | null = null;
 
 	for (const change of changes) {
@@ -140,7 +175,11 @@ export async function fetchActiveChanges(
 		} else if (error) {
 			fetchError = error;
 		}
+
+		// Fetch task groups for each change (fails silently to empty array)
+		const groups = await fetchTaskGroups(pi, change.name);
+		taskGroups.set(change.name, groups);
 	}
 
-	return { changes, details, error: fetchError };
+	return { changes, details, taskGroups, error: fetchError };
 }

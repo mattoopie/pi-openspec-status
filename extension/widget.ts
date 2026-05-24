@@ -61,12 +61,9 @@ export function renderSingleChange(
 	const artifactStr = renderArtifactPart(theme, detail, useFullNames);
 	lines.push(truncateToWidth(theme.fg("muted", "Artifacts: ") + artifactStr, availableWidth, "…"));
 
-	// Line 3: Task progress bar + apply hint
+	// Line 3: Task progress bar (no apply suffix)
 	const taskBar = progressBar(theme, change.completedTasks, change.totalTasks);
-	const applyHint = detail.applyRequires.length > 0
-		? ` · ${theme.fg("muted", `apply: ${detail.applyRequires.join(", ")}`)}`
-		: "";
-	lines.push(truncateToWidth(`${theme.fg("muted", "Tasks: ")}${taskBar}${applyHint}`, availableWidth, "…"));
+	lines.push(truncateToWidth(`${theme.fg("muted", "Tasks: ")}${taskBar}`, availableWidth, "…"));
 
 	return lines;
 }

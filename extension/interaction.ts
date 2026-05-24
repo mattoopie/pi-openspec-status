@@ -29,6 +29,7 @@ export function registerInteractionShortcut(pi: ExtensionAPI): void {
 			const fetchResult = await ctx.ui.custom<{
 				changes: ChangeSummary[];
 				details: Map<string, ChangeDetail>;
+				taskGroups: Map<string, import("./types.ts").TaskGroup[]>;
 				error: string | null;
 			} | null>(
 				(tui, theme, _kb, done) => {
@@ -50,12 +51,12 @@ export function registerInteractionShortcut(pi: ExtensionAPI): void {
 
 			if (!fetchResult) return;
 
-			const { changes, details, error } = fetchResult;
+			const { changes, details, taskGroups, error } = fetchResult;
 
 			// Open the change list overlay
 			const actionResult = await ctx.ui.custom<OverlayAction | null>(
 				(_tui, theme, _kb, done) => {
-					const overlay = new OpenSpecOverlay(changes, details, theme, (action) => done(action), error);
+					const overlay = new OpenSpecOverlay(changes, details, taskGroups, theme, (action) => done(action), error);
 					return {
 						render: (w) => overlay.render(w),
 						handleInput: (data) => {
