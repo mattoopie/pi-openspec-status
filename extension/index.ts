@@ -46,7 +46,26 @@ export default function (pi: ExtensionAPI) {
 	const FALLBACK_MAX_DELAY = 120_000;   // 120 s ceiling
 	let fallbackTimeout: ReturnType<typeof setTimeout> | null = null;
 	let currentFallbackDelay = FALLBACK_BASE_DELAY;
-	let isRefreshInFlight = false;
+
+	type RefreshSource = "initial" | "event" | "fallback";
+	interface RefreshRequest {
+		ctx: import("@earendil-works/pi-coding-agent").ExtensionContext;
+		gen: number;
+		source: RefreshSource;
+		resetBackoff: boolean;
+	}
+	interface RefreshOutcome {
+		changed: boolean;
+		successful: boolean;
+	}
+	interface RefreshCycleResult {
+		eventReset: boolean;
+	}
+
+	// All refresh sources share one promise. Events arriving during a fetch are
+	// coalesced into one follow-up request instead of starting overlapping work.
+	let refreshInFlight: Promise<RefreshCycleResult> | null = null;
+	let pendingRefresh: RefreshRequest | null = null;
 
 	// ── Stale-ctx guards ──────────────────────────────────────────────
 	// sessionGeneration: monotonic counter; bumped on every session_start.
@@ -67,11 +86,21 @@ export default function (pi: ExtensionAPI) {
 		return process.stdout.columns ?? 80;
 	}
 
+	function isCurrentGeneration(gen: number): boolean {
+		return !isShutdown && sessionGeneration === gen;
+	}
+
 	/**
-	 * Fetch active changes and update the widget.
+	 * Fetch active changes and update the widget. This is the uncoordinated
+	 * operation; all callers must use requestRefresh() below.
 	 */
-	async function refresh(ctx: import("@earendil-works/pi-coding-agent").ExtensionContext, gen?: number): Promise<boolean> {
-		if (!ctx.hasUI) return false;
+	async function refresh(
+		ctx: import("@earendil-works/pi-coding-agent").ExtensionContext,
+		gen: number,
+	): Promise<RefreshOutcome> {
+		if (!isCurrentGeneration(gen) || !ctx.hasUI) {
+			return { changed: false, successful: false };
+		}
 		if (!cliAvailable) {
 			// Show CLI not found message once
 			if (cliChecked && cachedLines === null) {
@@ -82,27 +111,25 @@ export default function (pi: ExtensionAPI) {
 				cachedLines = lines;
 				cachedWidth = width;
 			}
-			return false;
+			return { changed: false, successful: false };
 		}
 
 		// Fetch the lightweight list first. Detailed status work is only needed
 		// when this snapshot differs from the last fully successful refresh.
 		const listed = await listChanges(pi);
-		// Bail if the session was replaced while awaiting the list.
-		// `gen` is passed by callers from session_start's async IIFE /
-		// interval. Event handlers (turn_end, etc.) pass no gen since
-		// their ctx is always fresh.
-		if (gen !== undefined && (isShutdown || sessionGeneration !== gen)) return false;
+		if (!isCurrentGeneration(gen)) {
+			return { changed: false, successful: false };
+		}
 
 		if (listed.error) {
-			// Keep the last known data visible when a lightweight check fails,
-			// while retaining the existing error state for the renderer.
+			// Keep the last known data visible while exposing the error through the
+			// renderer's stale-data indicator.
 			state = {
 				...state,
 				error: listed.error,
 			};
 			updateWidget(ctx);
-			return false;
+			return { changed: false, successful: false };
 		}
 
 		const fingerprint = getChangeListFingerprint(listed.changes);
@@ -116,14 +143,15 @@ export default function (pi: ExtensionAPI) {
 				};
 			}
 			updateWidget(ctx);
-			return false;
+			return { changed: false, successful: true };
 		}
 
 		const { details, taskGroups, error } = await fetchChangeDetails(pi, listed.changes, {
 			includeTaskGroups: false,
 		});
-		// Bail if the session was replaced while awaiting detailed data.
-		if (gen !== undefined && (isShutdown || sessionGeneration !== gen)) return false;
+		if (!isCurrentGeneration(gen)) {
+			return { changed: false, successful: false };
+		}
 
 		state = {
 			changes: listed.changes,
@@ -138,14 +166,89 @@ export default function (pi: ExtensionAPI) {
 			lastSuccessfulFingerprint = fingerprint;
 		}
 
-		// Render and update widget
 		updateWidget(ctx);
-		return true;
+		return { changed: true, successful: error === null };
+	}
+
+	function queueRefresh(request: RefreshRequest): void {
+		if (pendingRefresh === null) {
+			pendingRefresh = request;
+			return;
+		}
+
+		// Keep the newest context/request, but do not lose a relevant OpenSpec
+		// event's request to reset fallback backoff.
+		pendingRefresh = {
+			...request,
+			resetBackoff: pendingRefresh.resetBackoff || request.resetBackoff,
+		};
+	}
+
+	/** Process one refresh and any requests coalesced while it was running. */
+	async function processRefreshQueue(first: RefreshRequest): Promise<RefreshCycleResult> {
+		let request: RefreshRequest | null = first;
+		let eventReset = false;
+
+		while (request !== null) {
+			if (!isCurrentGeneration(request.gen)) break;
+
+			let outcome: RefreshOutcome;
+			try {
+				outcome = await refresh(request.ctx, request.gen);
+			} catch (err) {
+				console.error("OpenSpec widget refresh error:", err);
+				outcome = { changed: false, successful: false };
+			}
+
+			if (!isCurrentGeneration(request.gen)) break;
+
+			if (request.source === "fallback" && outcome.successful) {
+				if (outcome.changed) {
+					currentFallbackDelay = FALLBACK_BASE_DELAY;
+				} else {
+					currentFallbackDelay = Math.min(
+						currentFallbackDelay + FALLBACK_BACKOFF_STEP,
+						FALLBACK_MAX_DELAY,
+					);
+				}
+			}
+
+			if (request.source === "event" && request.resetBackoff && outcome.successful) {
+				currentFallbackDelay = FALLBACK_BASE_DELAY;
+				eventReset = true;
+			}
+
+			request = pendingRefresh;
+			pendingRefresh = null;
+		}
+
+		return { eventReset };
+	}
+
+	/**
+	 * Start a refresh cycle, or coalesce the request behind the active cycle.
+	 */
+	function requestRefresh(request: RefreshRequest): Promise<RefreshCycleResult> {
+		if (!isCurrentGeneration(request.gen)) {
+			return Promise.resolve({ eventReset: false });
+		}
+		if (refreshInFlight) {
+			queueRefresh(request);
+			return refreshInFlight;
+		}
+
+		const cycle = processRefreshQueue(request);
+		refreshInFlight = cycle;
+		void cycle.then(() => {
+			if (refreshInFlight === cycle) refreshInFlight = null;
+		});
+		return cycle;
 	}
 
 	/**
 	 * Schedule the next fallback refresh using the current backoff delay.
-	 * Respects session generation, shutdown state, idle state, and in-flight guard.
+	 * Respects session generation, shutdown state, idle state, and the shared
+	 * refresh coordinator.
 	 */
 	function scheduleFallback(
 		ctx: import("@earendil-works/pi-coding-agent").ExtensionContext,
@@ -153,40 +256,30 @@ export default function (pi: ExtensionAPI) {
 	): void {
 		if (fallbackTimeout) clearTimeout(fallbackTimeout);
 		fallbackTimeout = setTimeout(() => {
-			if (isShutdown || sessionGeneration !== gen) return;
-			if (isRefreshInFlight) {
-				// Previous refresh still running — reschedule with same delay.
+			fallbackTimeout = null;
+			if (!isCurrentGeneration(gen)) return;
+			if (refreshInFlight) {
+				// An event-driven refresh is active; try again after the current
+				// cadence rather than queueing a redundant fallback request.
 				scheduleFallback(ctx, gen);
 				return;
 			}
 			if (!ctx.isIdle()) {
-				// Agent is actively processing — schedule another check
-				// without changing the delay.
+				// Agent is actively processing — schedule another check without
+				// changing the delay.
 				scheduleFallback(ctx, gen);
 				return;
 			}
-			isRefreshInFlight = true;
-			refresh(ctx, gen)
-				.then((changed) => {
-					if (isShutdown || sessionGeneration !== gen) return;
-					if (changed) {
-						currentFallbackDelay = FALLBACK_BASE_DELAY;
-					} else {
-						currentFallbackDelay = Math.min(
-							currentFallbackDelay + FALLBACK_BACKOFF_STEP,
-							FALLBACK_MAX_DELAY,
-						);
-					}
-				})
-				.catch((err) => {
-					console.error("OpenSpec widget fallback refresh error:", err);
-				})
-				.finally(() => {
-					isRefreshInFlight = false;
-					if (!isShutdown && sessionGeneration === gen) {
-						scheduleFallback(ctx, gen);
-					}
-				});
+
+			const cycle = requestRefresh({
+				ctx,
+				gen,
+				source: "fallback",
+				resetBackoff: false,
+			});
+			void cycle.then(() => {
+				if (isCurrentGeneration(gen)) scheduleFallback(ctx, gen);
+			});
 		}, currentFallbackDelay);
 	}
 
@@ -212,14 +305,36 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	// ── Debounced refresh (500ms shared) ──────────────────────────────
+	// Keep the reset bit separate from debounce arguments so a relevant
+	// tool_result is not accidentally overwritten by a later turn_end event.
+	let pendingEventBackoffReset = false;
 	const debouncedRefresh = debounce(
 		(ctx: import("@earendil-works/pi-coding-agent").ExtensionContext) => {
-			refresh(ctx).catch((err) => {
-				console.error("OpenSpec widget refresh error:", err);
+			const resetBackoff = pendingEventBackoffReset;
+			pendingEventBackoffReset = false;
+			const gen = sessionGeneration;
+			const cycle = requestRefresh({
+				ctx,
+				gen,
+				source: "event",
+				resetBackoff,
+			});
+			void cycle.then((result) => {
+				if (result.eventReset && isCurrentGeneration(gen)) {
+					scheduleFallback(ctx, gen);
+				}
 			});
 		},
 		500,
 	);
+
+	function queueDebouncedRefresh(
+		ctx: import("@earendil-works/pi-coding-agent").ExtensionContext,
+		resetBackoff = false,
+	): void {
+		pendingEventBackoffReset ||= resetBackoff;
+		debouncedRefresh(ctx);
+	}
 
 	// ── Tool result handler: check for openspec-related changes ───────
 	function isOpenSpecRelated(toolName: string, input: Record<string, unknown>): boolean {
@@ -249,6 +364,19 @@ export default function (pi: ExtensionAPI) {
 		// sessionGeneration !== gen and bail out after each await.
 		isShutdown = false;
 		const gen = ++sessionGeneration;
+		// Detach any cycle from the previous generation. Its promise may still
+		// settle later, but generation checks prevent it from touching this one.
+		refreshInFlight = null;
+		pendingRefresh = null;
+		pendingEventBackoffReset = false;
+		cliAvailable = false;
+		cliChecked = false;
+		state = {
+			changes: [],
+			details: new Map(),
+			taskGroups: new Map(),
+			error: null,
+		};
 		lastSuccessfulFingerprint = null;
 		currentFallbackDelay = FALLBACK_BASE_DELAY;
 
@@ -282,9 +410,16 @@ export default function (pi: ExtensionAPI) {
 				return;
 			}
 
-			await refresh(ctx, gen);
-			// Start the recursive fallback cycle after the initial refresh.
-			if (!isShutdown && sessionGeneration === gen) {
+			const cycle = requestRefresh({
+				ctx,
+				gen,
+				source: "initial",
+				resetBackoff: false,
+			});
+			await cycle;
+			// Start the recursive fallback cycle after the initial refresh cycle,
+			// including any event refresh that was coalesced behind it.
+			if (isCurrentGeneration(gen)) {
 				scheduleFallback(ctx, gen);
 			}
 		})().catch((err) => {
@@ -299,7 +434,11 @@ export default function (pi: ExtensionAPI) {
 			fallbackTimeout = null;
 		}
 		debouncedRefresh.cancel();
-		isRefreshInFlight = false;
+		pendingEventBackoffReset = false;
+		pendingRefresh = null;
+		// Detach the active promise from the session. The old operation is not
+		// forcibly cancelled, but its generation checks prevent stale updates.
+		refreshInFlight = null;
 		// Signal to any in-progress async work that this session is done.
 		// For same-closure session replacements (e.g. /reload), the next
 		// session_start clears this. For cross-instance replacements, the
@@ -311,14 +450,14 @@ export default function (pi: ExtensionAPI) {
 	pi.on("turn_end", async (_event, ctx) => {
 		if (!ctx.hasUI) return;
 		if (!cliAvailable && cliChecked) return;
-		debouncedRefresh(ctx);
+		queueDebouncedRefresh(ctx);
 	});
 
 	// agent_end: debounced refresh
 	pi.on("agent_end", async (_event, ctx) => {
 		if (!ctx.hasUI) return;
 		if (!cliAvailable && cliChecked) return;
-		debouncedRefresh(ctx);
+		queueDebouncedRefresh(ctx);
 	});
 
 	// tool_result: debounced refresh if openspec-related
@@ -326,7 +465,7 @@ export default function (pi: ExtensionAPI) {
 		if (!ctx.hasUI) return;
 		if (!cliAvailable && cliChecked) return;
 		if (isOpenSpecRelated(event.toolName, event.input as Record<string, unknown>)) {
-			debouncedRefresh(ctx);
+			queueDebouncedRefresh(ctx, true);
 		}
 	});
 

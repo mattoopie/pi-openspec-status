@@ -12,7 +12,7 @@ A [pi](https://pi.dev) coding agent extension that displays the active OpenSpec 
 - **Multi-change overview** — when multiple active changes exist, shows a header with the active count followed by one condensed line per change with artifact initials, task counters, and blocked-dependency hints
 - **Artifact status indicators** — uses filled circle (●) for done, open circle (○) for ready, and dotted circle (◌) for blocked, each colored with theme-aware success/muted/warning colors
 - **Interactive dialog** — press `Ctrl+Alt+O` to open a scrollable dialog with full change details, task breakdowns, and dependency info
-- **Automatic data refresh** — fetches from the `openspec` CLI on session start, after each agent turn/end (debounced 500ms), when tools write to `openspec/` or bash commands reference openspec, plus a fallback refresh every 30 seconds
+- **Automatic data refresh** — event-driven refreshes fetch from the `openspec` CLI on session start, after each agent turn/end (debounced 500ms), and when tools write to `openspec/` or bash commands reference openspec; a bounded fallback safety poll starts at 30 seconds and backs off to at most 120 seconds when unchanged
 - **Error resilience** — gracefully shows "CLI not found" when openspec is unavailable, silently no-ops when not in an OpenSpec project, and retains last-known state with a muted error indicator on CLI failures
 
 ## Screenshots

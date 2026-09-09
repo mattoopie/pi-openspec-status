@@ -132,6 +132,21 @@ export function renderError(theme: Theme, message: string, availableWidth: numbe
 }
 
 /**
+ * Prefix retained data with a visible warning when a refresh failed. Keeping
+ * the indicator on the first existing line preserves the widget's height.
+ */
+function addStaleIndicator(
+	theme: Theme,
+	lines: string[],
+	message: string,
+	availableWidth: number,
+): string[] {
+	if (lines.length === 0) return renderError(theme, message, availableWidth);
+	const indicator = theme.fg("warning", `⚠ ${message}`);
+	return [truncateToWidth(`${indicator} ${lines[0]}`, availableWidth, "…"), ...lines.slice(1)];
+}
+
+/**
  * Main render function - selects the appropriate layout based on number of changes.
  */
 export function renderWidget(
@@ -149,14 +164,18 @@ export function renderWidget(
 		return renderNoChanges(theme);
 	}
 
+	let lines: string[];
 	if (changes.length === 1) {
 		const detail = details.get(changes[0]!.name);
 		if (detail) {
-			return renderSingleChange(theme, changes[0]!, detail, availableWidth);
+			lines = renderSingleChange(theme, changes[0]!, detail, availableWidth);
+		} else {
+			// Fall back to multi-change style for single change without detail
+			lines = renderMultiChange(theme, changes, details, availableWidth);
 		}
-		// Fall back to multi-change style for single change without detail
-		return renderMultiChange(theme, changes, details, availableWidth);
+	} else {
+		lines = renderMultiChange(theme, changes, details, availableWidth);
 	}
 
-	return renderMultiChange(theme, changes, details, availableWidth);
+	return error ? addStaleIndicator(theme, lines, error, availableWidth) : lines;
 }
