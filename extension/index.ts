@@ -39,8 +39,14 @@ export default function (pi: ExtensionAPI) {
 	let cachedLines: string[] | null = null;
 	let cachedWidth: number = 0;
 
-	// Interval handle for 30s fallback refresh
-	let refreshInterval: ReturnType<typeof setInterval> | null = null;
+	// ── Fallback refresh ──────────────────────────────────────────────
+	// Uses recursive setTimeout for adaptive backoff instead of setInterval.
+	const FALLBACK_BASE_DELAY = 30_000;   // 30 s initial
+	const FALLBACK_BACKOFF_STEP = 30_000; // +30 s per consecutive unchanged check
+	const FALLBACK_MAX_DELAY = 120_000;   // 120 s ceiling
+	let fallbackTimeout: ReturnType<typeof setTimeout> | null = null;
+	let currentFallbackDelay = FALLBACK_BASE_DELAY;
+	let isRefreshInFlight = false;
 
 	// ── Stale-ctx guards ──────────────────────────────────────────────
 	// sessionGeneration: monotonic counter; bumped on every session_start.
@@ -64,8 +70,8 @@ export default function (pi: ExtensionAPI) {
 	/**
 	 * Fetch active changes and update the widget.
 	 */
-	async function refresh(ctx: import("@earendil-works/pi-coding-agent").ExtensionContext, gen?: number): Promise<void> {
-		if (!ctx.hasUI) return;
+	async function refresh(ctx: import("@earendil-works/pi-coding-agent").ExtensionContext, gen?: number): Promise<boolean> {
+		if (!ctx.hasUI) return false;
 		if (!cliAvailable) {
 			// Show CLI not found message once
 			if (cliChecked && cachedLines === null) {
@@ -76,7 +82,7 @@ export default function (pi: ExtensionAPI) {
 				cachedLines = lines;
 				cachedWidth = width;
 			}
-			return;
+			return false;
 		}
 
 		// Fetch the lightweight list first. Detailed status work is only needed
@@ -86,7 +92,7 @@ export default function (pi: ExtensionAPI) {
 		// `gen` is passed by callers from session_start's async IIFE /
 		// interval. Event handlers (turn_end, etc.) pass no gen since
 		// their ctx is always fresh.
-		if (gen !== undefined && (isShutdown || sessionGeneration !== gen)) return;
+		if (gen !== undefined && (isShutdown || sessionGeneration !== gen)) return false;
 
 		if (listed.error) {
 			// Keep the last known data visible when a lightweight check fails,
@@ -96,7 +102,7 @@ export default function (pi: ExtensionAPI) {
 				error: listed.error,
 			};
 			updateWidget(ctx);
-			return;
+			return false;
 		}
 
 		const fingerprint = getChangeListFingerprint(listed.changes);
@@ -110,14 +116,14 @@ export default function (pi: ExtensionAPI) {
 				};
 			}
 			updateWidget(ctx);
-			return;
+			return false;
 		}
 
 		const { details, taskGroups, error } = await fetchChangeDetails(pi, listed.changes, {
 			includeTaskGroups: false,
 		});
 		// Bail if the session was replaced while awaiting detailed data.
-		if (gen !== undefined && (isShutdown || sessionGeneration !== gen)) return;
+		if (gen !== undefined && (isShutdown || sessionGeneration !== gen)) return false;
 
 		state = {
 			changes: listed.changes,
@@ -134,6 +140,54 @@ export default function (pi: ExtensionAPI) {
 
 		// Render and update widget
 		updateWidget(ctx);
+		return true;
+	}
+
+	/**
+	 * Schedule the next fallback refresh using the current backoff delay.
+	 * Respects session generation, shutdown state, idle state, and in-flight guard.
+	 */
+	function scheduleFallback(
+		ctx: import("@earendil-works/pi-coding-agent").ExtensionContext,
+		gen: number,
+	): void {
+		if (fallbackTimeout) clearTimeout(fallbackTimeout);
+		fallbackTimeout = setTimeout(() => {
+			if (isShutdown || sessionGeneration !== gen) return;
+			if (isRefreshInFlight) {
+				// Previous refresh still running — reschedule with same delay.
+				scheduleFallback(ctx, gen);
+				return;
+			}
+			if (!ctx.isIdle()) {
+				// Agent is actively processing — schedule another check
+				// without changing the delay.
+				scheduleFallback(ctx, gen);
+				return;
+			}
+			isRefreshInFlight = true;
+			refresh(ctx, gen)
+				.then((changed) => {
+					if (isShutdown || sessionGeneration !== gen) return;
+					if (changed) {
+						currentFallbackDelay = FALLBACK_BASE_DELAY;
+					} else {
+						currentFallbackDelay = Math.min(
+							currentFallbackDelay + FALLBACK_BACKOFF_STEP,
+							FALLBACK_MAX_DELAY,
+						);
+					}
+				})
+				.catch((err) => {
+					console.error("OpenSpec widget fallback refresh error:", err);
+				})
+				.finally(() => {
+					isRefreshInFlight = false;
+					if (!isShutdown && sessionGeneration === gen) {
+						scheduleFallback(ctx, gen);
+					}
+				});
+		}, currentFallbackDelay);
 	}
 
 	/**
@@ -196,6 +250,7 @@ export default function (pi: ExtensionAPI) {
 		isShutdown = false;
 		const gen = ++sessionGeneration;
 		lastSuccessfulFingerprint = null;
+		currentFallbackDelay = FALLBACK_BASE_DELAY;
 
 		// Show loading state immediately so navigation is not blocked
 		const theme = ctx.ui.theme;
@@ -204,18 +259,6 @@ export default function (pi: ExtensionAPI) {
 		ctx.ui.setWidget("openspec", loadingLines);
 		cachedLines = loadingLines;
 		cachedWidth = width;
-
-		// Start 30s fallback refresh interval immediately
-		if (refreshInterval) {
-			clearInterval(refreshInterval);
-		}
-		refreshInterval = setInterval(() => {
-			// Bail if the session was replaced since this interval started.
-			if (isShutdown || sessionGeneration !== gen) return;
-			refresh(ctx, gen).catch((err) => {
-				console.error("OpenSpec widget interval refresh error:", err);
-			});
-		}, 30000);
 
 		// Do CLI check and initial data fetch asynchronously so pi can
 		// navigate to the session immediately without waiting for results.
@@ -240,6 +283,10 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			await refresh(ctx, gen);
+			// Start the recursive fallback cycle after the initial refresh.
+			if (!isShutdown && sessionGeneration === gen) {
+				scheduleFallback(ctx, gen);
+			}
 		})().catch((err) => {
 			console.error("OpenSpec widget startup error:", err);
 		});
@@ -247,11 +294,12 @@ export default function (pi: ExtensionAPI) {
 
 	// session_shutdown: clean up
 	pi.on("session_shutdown", async (_event, _ctx) => {
-		if (refreshInterval) {
-			clearInterval(refreshInterval);
-			refreshInterval = null;
+		if (fallbackTimeout) {
+			clearTimeout(fallbackTimeout);
+			fallbackTimeout = null;
 		}
 		debouncedRefresh.cancel();
+		isRefreshInFlight = false;
 		// Signal to any in-progress async work that this session is done.
 		// For same-closure session replacements (e.g. /reload), the next
 		// session_start clears this. For cross-instance replacements, the
