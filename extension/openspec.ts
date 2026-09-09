@@ -3,6 +3,8 @@
  * Provides CLI execution wrapper, list/status fetching, and error handling.
  */
 
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { ChangeSummary, ChangeDetail, TaskGroup } from "./types.ts";
 import { parseTaskGroups } from "./tasks-parser.ts";
@@ -217,7 +219,7 @@ export async function getChangeStatus(
  * the extracted task groups. Returns an empty array on any failure
  * (file missing, read error, parse error).
  *
- * @param pi — ExtensionAPI for executing CLI commands
+ * @param pi — ExtensionAPI used to resolve the OpenSpec project directory
  * @param changeName — Name of the change (used to locate change dir)
  * @returns Parsed TaskGroup array (empty on any failure)
  */
@@ -227,13 +229,12 @@ export async function fetchTaskGroups(
 ): Promise<TaskGroup[]> {
 	try {
 		const dir = await getOpenSpecDir(pi);
-		const filePath = `openspec/changes/${changeName}/tasks.md`;
-		const result = await pi.exec("cat", [filePath], { timeout: 5000, cwd: dir ?? undefined });
+		const filePath = join(dir ?? process.cwd(), "openspec", "changes", changeName, "tasks.md");
+		const content = await readFile(filePath, "utf8");
 
-		if (result.code !== 0) return [];
-		if (!result.stdout?.trim()) return [];
+		if (!content.trim()) return [];
 
-		return parseTaskGroups(result.stdout);
+		return parseTaskGroups(content);
 	} catch {
 		return [];
 	}
