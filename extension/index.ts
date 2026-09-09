@@ -71,7 +71,7 @@ export default function (pi: ExtensionAPI) {
 			return;
 		}
 
-		const { changes, details, taskGroups, error } = await fetchActiveChanges(pi);
+		const { changes, details, taskGroups, error } = await fetchActiveChanges(pi, { includeTaskGroups: false });
 		// Bail if the session was replaced while awaiting the CLI data.
 		// `gen` is passed by callers from session_start's async IIFE /
 		// interval. Event handlers (turn_end, etc.) pass no gen since

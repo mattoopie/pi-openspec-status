@@ -242,8 +242,14 @@ export async function fetchTaskGroups(
 /**
  * Fetch all active changes with their detailed status and task group data.
  */
+export interface FetchActiveChangesOptions {
+	/** Fetch task groups from each change's tasks.md file. */
+	includeTaskGroups?: boolean;
+}
+
 export async function fetchActiveChanges(
 	pi: ExtensionAPI,
+	options: FetchActiveChangesOptions = {},
 ): Promise<{
 	changes: ChangeSummary[];
 	details: Map<string, ChangeDetail>;
@@ -256,22 +262,39 @@ export async function fetchActiveChanges(
 		return { changes: [], details: new Map(), taskGroups: new Map(), error: listError };
 	}
 
-	// Fetch details for each change
+	const includeTaskGroups = options.includeTaskGroups === true;
+
+	// Fetch each change independently so status requests can run concurrently.
+	// Task-group reads are optional and run alongside the status request when enabled.
+	const results = await Promise.all(
+		changes.map(async (change) => {
+			const [{ detail, error }, groups] = await Promise.all([
+				getChangeStatus(pi, change.name),
+				includeTaskGroups ? fetchTaskGroups(pi, change.name) : Promise.resolve([] as TaskGroup[]),
+			]);
+
+			return { change, detail, error, groups };
+		}),
+	);
+
 	const details = new Map<string, ChangeDetail>();
 	const taskGroups = new Map<string, TaskGroup[]>();
 	let fetchError: string | null = null;
 
-	for (const change of changes) {
-		const { detail, error } = await getChangeStatus(pi, change.name);
+	// Promise.all preserves the input order, so selecting the first error here is
+	// deterministic even when requests complete in a different order.
+	for (const { change, detail, error, groups } of results) {
 		if (detail) {
 			details.set(change.name, detail);
-		} else if (error) {
+		} else if (!fetchError && error) {
 			fetchError = error;
 		}
 
-		// Fetch task groups for each change (fails silently to empty array)
-		const groups = await fetchTaskGroups(pi, change.name);
-		taskGroups.set(change.name, groups);
+		// Keep the return shape stable while avoiding task-group entries on the
+		// background path, where task groups were not requested.
+		if (includeTaskGroups) {
+			taskGroups.set(change.name, groups);
+		}
 	}
 
 	return { changes, details, taskGroups, error: fetchError };

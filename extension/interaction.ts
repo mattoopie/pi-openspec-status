@@ -36,7 +36,7 @@ export function registerInteractionShortcut(pi: ExtensionAPI): void {
 					const loader = new LoadingOverlay(tui, theme, "Loading OpenSpec changes...");
 					loader.onAbort = () => done(null);
 
-					fetchActiveChanges(pi)
+					fetchActiveChanges(pi, { includeTaskGroups: true })
 						.then((result) => done(result))
 						.catch(() => done(null));
 
