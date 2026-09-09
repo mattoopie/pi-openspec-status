@@ -241,28 +241,58 @@ export async function fetchTaskGroups(
 }
 
 /**
- * Fetch all active changes with their detailed status and task group data.
+ * Create a stable fingerprint for the lightweight change-list snapshot.
+ *
+ * The CLI is free to return changes in a different order on each invocation,
+ * so entries are sorted by name before serialization. Summary fields are
+ * included in addition to lastModified because they provide useful change
+ * detection when a timestamp is not updated as expected.
+ */
+export function getChangeListFingerprint(changes: ChangeSummary[]): string {
+	const entries = changes
+		.map((change) => ({
+			name: change.name,
+			lastModified: change.lastModified,
+			completedTasks: change.completedTasks,
+			totalTasks: change.totalTasks,
+			status: change.status,
+		}))
+		.sort((a, b) => {
+			if (a.name < b.name) return -1;
+			if (a.name > b.name) return 1;
+
+			// Names should be unique, but keep duplicate-name ordering stable too.
+			const aSerialized = JSON.stringify(a) ?? "";
+			const bSerialized = JSON.stringify(b) ?? "";
+			if (aSerialized < bSerialized) return -1;
+			if (aSerialized > bSerialized) return 1;
+			return 0;
+		});
+
+	return JSON.stringify(entries) ?? "[]";
+}
+
+/**
+ * Fetch detailed status and, optionally, task group data for a known list of
+ * active changes. The list is passed in so callers can avoid repeating the
+ * detailed work when only the lightweight snapshot was checked.
  */
 export interface FetchActiveChangesOptions {
 	/** Fetch task groups from each change's tasks.md file. */
 	includeTaskGroups?: boolean;
 }
 
-export async function fetchActiveChanges(
-	pi: ExtensionAPI,
-	options: FetchActiveChangesOptions = {},
-): Promise<{
-	changes: ChangeSummary[];
+export interface FetchChangeDetailsResult {
 	details: Map<string, ChangeDetail>;
 	taskGroups: Map<string, TaskGroup[]>;
 	error: string | null;
-}> {
-	// First, get the list of changes
-	const { changes, error: listError } = await listChanges(pi);
-	if (listError) {
-		return { changes: [], details: new Map(), taskGroups: new Map(), error: listError };
-	}
+}
 
+export async function fetchChangeDetails(
+	pi: ExtensionAPI,
+	changes: ChangeSummary[],
+	options: FetchActiveChangesOptions = {},
+): Promise<FetchChangeDetailsResult> {
 	const includeTaskGroups = options.includeTaskGroups === true;
 
 	// Fetch each change independently so status requests can run concurrently.
@@ -298,5 +328,30 @@ export async function fetchActiveChanges(
 		}
 	}
 
-	return { changes, details, taskGroups, error: fetchError };
+	return { details, taskGroups, error: fetchError };
+}
+
+/**
+ * Fetch all active changes with their detailed status and task group data.
+ * This wrapper keeps the existing API used by the interactive overlay.
+ */
+export async function fetchActiveChanges(
+	pi: ExtensionAPI,
+	options: FetchActiveChangesOptions = {},
+): Promise<{
+	changes: ChangeSummary[];
+	details: Map<string, ChangeDetail>;
+	taskGroups: Map<string, TaskGroup[]>;
+	error: string | null;
+}> {
+	// First, get the list of changes.
+	const { changes, error: listError } = await listChanges(pi);
+	if (listError) {
+		return { changes: [], details: new Map(), taskGroups: new Map(), error: listError };
+	}
+
+	return {
+		changes,
+		...(await fetchChangeDetails(pi, changes, options)),
+	};
 }

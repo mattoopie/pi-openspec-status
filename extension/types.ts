@@ -40,7 +40,6 @@ export interface WidgetState {
 	details: Map<string, ChangeDetail>;
 	taskGroups: Map<string, TaskGroup[]>;
 	error: string | null;
-	lastRefresh: number;
 }
 
 /** Action dispatched from the interactive overlay to the shortcut handler */

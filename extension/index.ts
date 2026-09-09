@@ -9,8 +9,13 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import type { WidgetState, TaskGroup } from "./types.ts";
-import { fetchActiveChanges, checkCliAvailable } from "./openspec.ts";
+import type { WidgetState } from "./types.ts";
+import {
+	checkCliAvailable,
+	fetchChangeDetails,
+	getChangeListFingerprint,
+	listChanges,
+} from "./openspec.ts";
 import { renderWidget } from "./widget.ts";
 import { registerInteractionShortcut } from "./interaction.ts";
 import { debounce, arraysEqual } from "./utils.ts";
@@ -24,8 +29,11 @@ export default function (pi: ExtensionAPI) {
 		details: new Map(),
 		taskGroups: new Map(),
 		error: null,
-		lastRefresh: 0,
 	};
+
+	// The detailed data corresponds to this last fully successful list snapshot.
+	// A null value forces the first refresh of each session to fetch details.
+	let lastSuccessfulFingerprint: string | null = null;
 
 	// Cached rendered lines to avoid unnecessary widget updates
 	let cachedLines: string[] | null = null;
@@ -71,21 +79,58 @@ export default function (pi: ExtensionAPI) {
 			return;
 		}
 
-		const { changes, details, taskGroups, error } = await fetchActiveChanges(pi, { includeTaskGroups: false });
-		// Bail if the session was replaced while awaiting the CLI data.
+		// Fetch the lightweight list first. Detailed status work is only needed
+		// when this snapshot differs from the last fully successful refresh.
+		const listed = await listChanges(pi);
+		// Bail if the session was replaced while awaiting the list.
 		// `gen` is passed by callers from session_start's async IIFE /
 		// interval. Event handlers (turn_end, etc.) pass no gen since
 		// their ctx is always fresh.
 		if (gen !== undefined && (isShutdown || sessionGeneration !== gen)) return;
 
-		// Update state
+		if (listed.error) {
+			// Keep the last known data visible when a lightweight check fails,
+			// while retaining the existing error state for the renderer.
+			state = {
+				...state,
+				error: listed.error,
+			};
+			updateWidget(ctx);
+			return;
+		}
+
+		const fingerprint = getChangeListFingerprint(listed.changes);
+		if (fingerprint === lastSuccessfulFingerprint) {
+			// A successful list check can clear a transient previous list error,
+			// but it must not replace the cached detailed data.
+			if (state.error !== null) {
+				state = {
+					...state,
+					error: null,
+				};
+			}
+			updateWidget(ctx);
+			return;
+		}
+
+		const { details, taskGroups, error } = await fetchChangeDetails(pi, listed.changes, {
+			includeTaskGroups: false,
+		});
+		// Bail if the session was replaced while awaiting detailed data.
+		if (gen !== undefined && (isShutdown || sessionGeneration !== gen)) return;
+
 		state = {
-			changes,
+			changes: listed.changes,
 			details,
 			taskGroups,
 			error,
-			lastRefresh: Date.now(),
 		};
+
+		// Do not cache a snapshot whose detailed fetch failed. Keeping the old
+		// fingerprint causes the next refresh to retry the status requests.
+		if (error === null) {
+			lastSuccessfulFingerprint = fingerprint;
+		}
 
 		// Render and update widget
 		updateWidget(ctx);
@@ -150,6 +195,7 @@ export default function (pi: ExtensionAPI) {
 		// sessionGeneration !== gen and bail out after each await.
 		isShutdown = false;
 		const gen = ++sessionGeneration;
+		lastSuccessfulFingerprint = null;
 
 		// Show loading state immediately so navigation is not blocked
 		const theme = ctx.ui.theme;
