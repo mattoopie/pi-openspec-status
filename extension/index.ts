@@ -15,6 +15,7 @@ import {
 	fetchChangeDetails,
 	getChangeListFingerprint,
 	listChanges,
+	resetOpenSpecDir,
 } from "./openspec.ts";
 import { renderWidget } from "./widget.ts";
 import { registerInteractionShortcut } from "./interaction.ts";
@@ -130,7 +131,7 @@ export default function (pi: ExtensionAPI) {
 
 		// Fetch the lightweight list first. Detailed status work is only needed
 		// when this snapshot differs from the last fully successful refresh.
-		const listed = await listChanges(pi);
+		const listed = await listChanges(pi, ctx.cwd);
 		if (!isCurrentGeneration(gen)) {
 			return { changed: false, successful: false };
 		}
@@ -161,6 +162,7 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		const { details, taskGroups, error } = await fetchChangeDetails(pi, listed.changes, {
+			cwd: ctx.cwd,
 			includeTaskGroups: false,
 		});
 		if (!isCurrentGeneration(gen)) {
@@ -371,6 +373,7 @@ export default function (pi: ExtensionAPI) {
 
 	// session_start: CLI check, initial fetch, render
 	pi.on("session_start", async (_event, ctx) => {
+		resetOpenSpecDir(ctx.cwd);
 		if (!ctx.hasUI) return;
 
 		// Reset shutdown flag and bump the generation counter.

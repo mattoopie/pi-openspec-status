@@ -1,16 +1,16 @@
 # git-root-fallback Specification
 
 ## Purpose
-Enable the OpenSpec status widget to detect the `openspec/changes` directory even when pi is launched from a subdirectory of a git repository, by first checking the current working directory and then falling back to the git repository root.
+Enable the OpenSpec status widget to detect the `openspec/changes` directory from Pi's session working directory, even when pi is launched from a subdirectory of a git repository, by first checking the session cwd and then falling back to the git repository root. This must not depend on the extension host process cwd.
 
 ## Requirements
 
 ### Requirement: OpenSpec directory resolution
-The extension SHALL resolve the `openspec/changes` directory by first checking the current working directory, then falling back to the git repository root. Once resolved, the path SHALL be cached for the remainder of the session.
+The extension SHALL resolve the `openspec/changes` directory by first checking the Pi session working directory, then falling back to the git repository root. Resolution commands and OpenSpec CLI commands SHALL use the session cwd or resolved project root, not the extension host process cwd. Resolved paths SHALL be cached per session cwd and reset when that session starts.
 
-#### Scenario: Current working directory has openspec/changes
-- **WHEN** pi is launched from a directory that contains `openspec/changes/`
-- **THEN** the extension uses that directory for all CLI invocations and file reads
+#### Scenario: Session cwd has openspec/changes
+- **WHEN** the Pi session cwd contains `openspec/changes/`, even if the extension host process cwd is different
+- **THEN** the extension uses the session cwd for all resolution commands, OpenSpec CLI invocations, and file reads
 - **AND** no git command is executed
 
 #### Scenario: Current working directory lacks openspec/changes but git root has it
@@ -29,9 +29,14 @@ The extension SHALL resolve the `openspec/changes` directory by first checking t
 - **AND** the `git` command is not available on PATH
 - **THEN** the extension treats the project as non-existent (same as current behavior when launched from a non-project directory)
 
-#### Scenario: Path is cached for the session
+#### Scenario: Path is cached for the session cwd
 - **WHEN** the resolved `openspec/changes` directory path is determined on first use
-- **THEN** subsequent CLI invocations and file reads within the same session reuse the cached path without re-checking or re-invoking git
+- **THEN** subsequent CLI invocations and file reads for that session cwd reuse the cached path without re-checking or re-invoking git
+- **AND** a different session cwd uses its own cached resolution
+
+#### Scenario: Session starts again in the same directory
+- **WHEN** a new session starts with a cwd that has a cached OpenSpec root
+- **THEN** that cwd's cached resolution is cleared and resolved again
 
 ### Requirement: CLI commands target the resolved directory
 All `openspec` CLI invocations and file reads SHALL use the resolved `openspec/changes` directory as their working directory or path prefix.

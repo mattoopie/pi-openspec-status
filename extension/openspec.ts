@@ -20,11 +20,10 @@ export interface CliCheckResult {
 // ── Directory resolution ──────────────────────────────────────────────
 
 /**
- * Module-level cache for the resolved OpenSpec project root directory.
- * Null means "not an OpenSpec project" — no `openspec/changes` found.
- * `undefined` means not yet resolved.
+ * Cache project-root lookups by Pi session cwd so one project's root cannot
+ * leak into another session hosted by the same process.
  */
-let _openSpecDir: string | null | undefined = undefined;
+const _openSpecDirs = new Map<string, Promise<string | null>>();
 
 /**
  * Resolve the OpenSpec project root directory by checking:
@@ -38,12 +37,12 @@ let _openSpecDir: string | null | undefined = undefined;
  * - If `git rev-parse` fails (not installed, not a repo, timeout): returns null
  * - If git succeeds but git root lacks `openspec/changes/`: returns null
  */
-export async function resolveOpenSpecDir(pi: ExtensionAPI): Promise<string | null> {
-	// Step 1: Check current working directory
+export async function resolveOpenSpecDir(pi: ExtensionAPI, cwd: string): Promise<string | null> {
+	// Step 1: Check the Pi session working directory, not the server process cwd.
 	try {
-		const cwdResult = await pi.exec("test", ["-d", "openspec/changes"], { timeout: 5000 });
+		const cwdResult = await pi.exec("test", ["-d", "openspec/changes"], { timeout: 5000, cwd });
 		if (cwdResult.code === 0) {
-			return process.cwd();
+			return cwd;
 		}
 	} catch {
 		// test command failed (unlikely), continue to git fallback
@@ -51,12 +50,12 @@ export async function resolveOpenSpecDir(pi: ExtensionAPI): Promise<string | nul
 
 	// Step 2: Git root fallback
 	try {
-		const gitResult = await pi.exec("git", ["rev-parse", "--show-toplevel"], { timeout: 5000 });
+		const gitResult = await pi.exec("git", ["rev-parse", "--show-toplevel"], { timeout: 5000, cwd });
 		if (gitResult.code === 0) {
 			const gitRoot = gitResult.stdout?.trim();
 			if (gitRoot) {
 				// Validate that openspec/changes exists at the git root
-				const gitCheckResult = await pi.exec("test", ["-d", `${gitRoot}/openspec/changes`], { timeout: 5000 });
+				const gitCheckResult = await pi.exec("test", ["-d", "openspec/changes"], { timeout: 5000, cwd: gitRoot });
 				if (gitCheckResult.code === 0) {
 					return gitRoot;
 				}
@@ -79,19 +78,24 @@ export async function resolveOpenSpecDir(pi: ExtensionAPI): Promise<string | nul
  * Returns the absolute path to the project root (containing `openspec/changes/`)
  * or null if no OpenSpec project is found.
  */
-export async function getOpenSpecDir(pi: ExtensionAPI): Promise<string | null> {
-	if (_openSpecDir === undefined) {
-		_openSpecDir = await resolveOpenSpecDir(pi);
+export async function getOpenSpecDir(pi: ExtensionAPI, cwd: string): Promise<string | null> {
+	let lookup = _openSpecDirs.get(cwd);
+	if (!lookup) {
+		lookup = resolveOpenSpecDir(pi, cwd);
+		_openSpecDirs.set(cwd, lookup);
 	}
-	return _openSpecDir;
+	return lookup;
 }
 
 /**
- * Reset the cached directory, forcing re-resolution on next call.
- * Useful for testing or when the session environment changes.
+ * Reset one session cwd's cached directory, or clear all cached directories.
  */
-export function resetOpenSpecDir(): void {
-	_openSpecDir = undefined;
+export function resetOpenSpecDir(cwd?: string): void {
+	if (cwd === undefined) {
+		_openSpecDirs.clear();
+	} else {
+		_openSpecDirs.delete(cwd);
+	}
 }
 
 // ── CLI check ─────────────────────────────────────────────────────────
@@ -119,22 +123,25 @@ export async function checkCliAvailable(pi: ExtensionAPI): Promise<CliCheckResul
  * Execute an openspec CLI command and return parsed JSON.
  * Returns null on failure.
  *
- * @param cwd - Optional working directory. If provided, the CLI runs from this directory.
+ * @param cwd - Working directory for the Pi session.
  */
 async function execOpenSpecJson<T>(
 	pi: ExtensionAPI,
 	args: string[],
 	errorLabel: string,
-	cwd?: string,
+	cwd: string,
 ): Promise<{ data: T | null; error: string | null }> {
 	try {
 		const result = await pi.exec("openspec", args, {
 			timeout: 10000,
-			...(cwd ? { cwd } : {}),
+			cwd,
 		});
 
 		if (result.code !== 0) {
-			const errMsg = result.stderr?.trim() || `exit code ${result.code}`;
+			// Some CLI diagnostics (including OpenSpec project-root errors) are
+			// written to stdout rather than stderr. Preserve both for the widget.
+			const output = [result.stdout?.trim(), result.stderr?.trim()].filter(Boolean).join("\n");
+			const errMsg = output || `exit code ${result.code}`;
 			return { data: null, error: `${errorLabel}: ${errMsg}` };
 		}
 
@@ -169,20 +176,21 @@ async function execOpenSpecJson<T>(
  */
 export async function listChanges(
 	pi: ExtensionAPI,
+	cwd: string,
 ): Promise<{ changes: ChangeSummary[]; error: string | null }> {
-	const dir = await getOpenSpecDir(pi);
+	const dir = await getOpenSpecDir(pi, cwd);
+	if (!dir) {
+		return { changes: [], error: null };
+	}
+
 	const result = await execOpenSpecJson<{ changes: ChangeSummary[] }>(
 		pi,
 		["list", "--json"],
 		"openspec list",
-		dir ?? undefined,
+		dir,
 	);
 
 	if (result.error) {
-		// Check if this is a "not an OpenSpec project" error
-		if (result.error.includes("not found") || result.error.includes("no such file")) {
-			return { changes: [], error: null }; // Not an OpenSpec project - no error
-		}
 		return { changes: [], error: result.error };
 	}
 
@@ -197,13 +205,14 @@ export async function listChanges(
 export async function getChangeStatus(
 	pi: ExtensionAPI,
 	name: string,
+	cwd: string,
 ): Promise<{ detail: ChangeDetail | null; error: string | null }> {
-	const dir = await getOpenSpecDir(pi);
+	const dir = await getOpenSpecDir(pi, cwd);
 	const result = await execOpenSpecJson<ChangeDetail>(
 		pi,
 		["status", "--json", "--change", name],
 		`openspec status (${name})`,
-		dir ?? undefined,
+		dir ?? cwd,
 	);
 
 	if (result.error) {
@@ -226,10 +235,11 @@ export async function getChangeStatus(
 export async function fetchTaskGroups(
 	pi: ExtensionAPI,
 	changeName: string,
+	cwd: string,
 ): Promise<TaskGroup[]> {
 	try {
-		const dir = await getOpenSpecDir(pi);
-		const filePath = join(dir ?? process.cwd(), "openspec", "changes", changeName, "tasks.md");
+		const dir = await getOpenSpecDir(pi, cwd);
+		const filePath = join(dir ?? cwd, "openspec", "changes", changeName, "tasks.md");
 		const content = await readFile(filePath, "utf8");
 
 		if (!content.trim()) return [];
@@ -278,6 +288,8 @@ export function getChangeListFingerprint(changes: ChangeSummary[]): string {
  * detailed work when only the lightweight snapshot was checked.
  */
 export interface FetchActiveChangesOptions {
+	/** Pi session working directory (distinct from process.cwd() in hosted runtimes). */
+	cwd: string;
 	/** Fetch task groups from each change's tasks.md file. */
 	includeTaskGroups?: boolean;
 }
@@ -291,7 +303,7 @@ export interface FetchChangeDetailsResult {
 export async function fetchChangeDetails(
 	pi: ExtensionAPI,
 	changes: ChangeSummary[],
-	options: FetchActiveChangesOptions = {},
+	options: FetchActiveChangesOptions,
 ): Promise<FetchChangeDetailsResult> {
 	const includeTaskGroups = options.includeTaskGroups === true;
 
@@ -300,8 +312,8 @@ export async function fetchChangeDetails(
 	const results = await Promise.all(
 		changes.map(async (change) => {
 			const [{ detail, error }, groups] = await Promise.all([
-				getChangeStatus(pi, change.name),
-				includeTaskGroups ? fetchTaskGroups(pi, change.name) : Promise.resolve([] as TaskGroup[]),
+				getChangeStatus(pi, change.name, options.cwd),
+				includeTaskGroups ? fetchTaskGroups(pi, change.name, options.cwd) : Promise.resolve([] as TaskGroup[]),
 			]);
 
 			return { change, detail, error, groups };
@@ -337,7 +349,7 @@ export async function fetchChangeDetails(
  */
 export async function fetchActiveChanges(
 	pi: ExtensionAPI,
-	options: FetchActiveChangesOptions = {},
+	options: FetchActiveChangesOptions,
 ): Promise<{
 	changes: ChangeSummary[];
 	details: Map<string, ChangeDetail>;
@@ -345,7 +357,7 @@ export async function fetchActiveChanges(
 	error: string | null;
 }> {
 	// First, get the list of changes.
-	const { changes, error: listError } = await listChanges(pi);
+	const { changes, error: listError } = await listChanges(pi, options.cwd);
 	if (listError) {
 		return { changes: [], details: new Map(), taskGroups: new Map(), error: listError };
 	}

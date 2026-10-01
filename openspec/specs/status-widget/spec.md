@@ -125,3 +125,7 @@ The widget SHALL handle error states gracefully without crashing or disrupting t
 - **WHEN** an `openspec` CLI call fails with a non-zero exit code
 - **THEN** the widget retains its last known state and displays a muted error indicator
 
+#### Scenario: CLI diagnostic is written to stdout
+- **WHEN** an `openspec` CLI call fails with a non-zero exit code and writes its diagnostic to stdout
+- **THEN** the diagnostic is included in the error shown by the widget, even if stderr is empty
+
