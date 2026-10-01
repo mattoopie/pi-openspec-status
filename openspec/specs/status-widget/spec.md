@@ -88,12 +88,21 @@ The widget SHALL refresh its display when relevant state changes occur.
 - **THEN** the widget refreshes regardless of events
 
 ### Requirement: Dynamic width adaptation
-The widget SHALL adapt its layout to the available terminal width.
+The widget SHALL adapt its layout to the available render width. When stdout does not provide a usable terminal width, the extension SHALL use a positive integer from `PI_OPENSPEC_STATUS_WIDTH`, or default to 120 columns.
+
+#### Scenario: Full artifact names fit in multi-change mode
+- **WHEN** every multi-change row fits with full artifact names at the available width
+- **THEN** artifact names are displayed in full on every row
+- **AND** change names occupy a padded column so artifact labels align
+
+#### Scenario: Full artifact names do not fit in multi-change mode
+- **WHEN** any multi-change row exceeds the available width with full artifact names
+- **THEN** artifact names are abbreviated to initials on every row
+- **AND** change names occupy a padded column so artifact labels align
 
 #### Scenario: Wide terminal (≥120 cols)
 - **WHEN** the terminal width is 120 columns or more
-- **THEN** artifact names are displayed in full (not abbreviated to initials) even in multi-change mode
-- **AND** a progress bar is shown in single-change mode
+- **THEN** a progress bar is shown in single-change mode
 
 #### Scenario: Narrow terminal (<80 cols)
 - **WHEN** the terminal width is below 80 columns

@@ -80,10 +80,24 @@ export default function (pi: ExtensionAPI) {
 	let isShutdown = false;
 
 	/**
-	 * Get available terminal width.
+	 * Get the width used to render the widget. RPC/web hosts generally pipe
+	 * stdout, so they can provide a target width with PI_OPENSPEC_STATUS_WIDTH.
 	 */
 	function getTerminalWidth(): number {
-		return process.stdout.columns ?? 80;
+		const terminalWidth = process.stdout.columns;
+		if (typeof terminalWidth === "number" && Number.isSafeInteger(terminalWidth) && terminalWidth > 0) {
+			return terminalWidth;
+		}
+
+		const configuredWidth = process.env.PI_OPENSPEC_STATUS_WIDTH?.trim();
+		if (configuredWidth && /^\d+$/.test(configuredWidth)) {
+			const parsedWidth = Number(configuredWidth);
+			if (Number.isSafeInteger(parsedWidth) && parsedWidth > 0) {
+				return parsedWidth;
+			}
+		}
+
+		return 120;
 	}
 
 	function isCurrentGeneration(gen: number): boolean {

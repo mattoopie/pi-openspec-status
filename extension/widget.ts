@@ -16,28 +16,11 @@ import {
 } from "./render-utils.ts";
 
 /**
- * Determine whether full artifact names can fit in the available width.
- * Try rendering mock lines with full names; if they exceed width, use initials.
+ * Determine whether full artifact names fit on the single-change artifact line.
  */
-function shouldUseFullNames(
-	theme: Theme,
-	change: ChangeSummary,
-	detail: ChangeDetail,
-	availableWidth: number,
-	isSingleChange: boolean,
-): boolean {
-	if (isSingleChange) {
-		const artifactStr = renderArtifactPart(theme, detail, true);
-		const line = `Artifacts: ${artifactStr}`;
-		return visibleWidth(line) <= availableWidth;
-	} else {
-		const statusIcon = changeStatusIcon(theme, change, detail);
-		const name = change.name;
-		const artifactStr = renderArtifactPart(theme, detail, true);
-		const taskCounter = `${change.completedTasks}/${change.totalTasks}`;
-		const line = `${statusIcon} ${name}  ${artifactStr}  ${taskCounter}`;
-		return visibleWidth(line) <= availableWidth;
-	}
+function shouldUseFullNames(theme: Theme, detail: ChangeDetail, availableWidth: number): boolean {
+	const artifactStr = renderArtifactPart(theme, detail, true);
+	return visibleWidth(`Artifacts: ${artifactStr}`) <= availableWidth;
 }
 
 /**
@@ -50,7 +33,7 @@ export function renderSingleChange(
 	availableWidth: number,
 ): string[] {
 	const lines: string[] = [];
-	const useFullNames = shouldUseFullNames(theme, change, detail, availableWidth, true);
+	const useFullNames = shouldUseFullNames(theme, detail, availableWidth);
 
 	// Line 1: Status icon + change name + schema
 	const statusIcon = changeStatusIcon(theme, change, detail);
@@ -80,27 +63,20 @@ export function renderMultiChange(
 	const lines: string[] = [];
 
 	// Header line
-	lines.push(theme.fg("accent", `OpenSpec (${changes.length} active)`));
+	lines.push(truncateToWidth(theme.fg("accent", `OpenSpec (${changes.length} active)`), availableWidth, "…"));
 
-	for (const change of changes) {
+	// Align artifact columns, but size the name cell to the longest displayed
+	// name rather than reserving the full maximum width for every change.
+	const maxNameWidth = Math.max(1, Math.floor(availableWidth * 0.35));
+	const displayedNames = changes.map((change) => truncateToWidth(change.name, maxNameWidth, "…"));
+	const nameWidth = Math.max(1, ...displayedNames.map(visibleWidth));
+	const rows = changes.map((change, index) => {
 		const detail = details.get(change.name);
 		const statusIcon = changeStatusIcon(theme, change, detail);
-
-		// Determine width for change name
-		const nameWidth = Math.floor(availableWidth * 0.2);
-		const truncatedName = truncateToWidth(change.name, nameWidth, "…");
-
-		// Artifact portion: use full names if width permits, initials otherwise
-		let artifactPart = "";
-		if (detail) {
-			const useFullNames = shouldUseFullNames(theme, change, detail, availableWidth, false);
-			artifactPart = renderArtifactPart(theme, detail, useFullNames);
-		}
-
-		// Task counter
+		const truncatedName = displayedNames[index]!;
+		const paddedName = truncatedName + " ".repeat(Math.max(0, nameWidth - visibleWidth(truncatedName)));
 		const taskCounter = theme.fg("text", `${change.completedTasks}/${change.totalTasks}`);
 
-		// Blocked dependency hint
 		let blockedHint = "";
 		if (detail && !detail.isComplete) {
 			const blockedArtifacts = detail.artifacts.filter((a) => a.status === "blocked");
@@ -109,7 +85,24 @@ export function renderMultiChange(
 			}
 		}
 
-		const changeLine = `${statusIcon} ${truncatedName}  ${artifactPart}  ${taskCounter}${blockedHint}`;
+		return {
+			detail,
+			rowPrefix: `${statusIcon} ${paddedName}  `,
+			taskCounter,
+			blockedHint,
+		};
+	});
+
+	// Decide once for the whole list, using the actual truncated/padded name
+	// cells and every row's counter and blocked hint. This prevents mixed labels.
+	const fullNamesFit = rows.every(({ detail, rowPrefix, taskCounter, blockedHint }) => {
+		const artifactPart = detail ? renderArtifactPart(theme, detail, true) : "";
+		return visibleWidth(`${rowPrefix}${artifactPart}  ${taskCounter}${blockedHint}`) <= availableWidth;
+	});
+
+	for (const { detail, rowPrefix, taskCounter, blockedHint } of rows) {
+		const artifactPart = detail ? renderArtifactPart(theme, detail, fullNamesFit) : "";
+		const changeLine = `${rowPrefix}${artifactPart}  ${taskCounter}${blockedHint}`;
 		lines.push(truncateToWidth(changeLine, availableWidth, "…"));
 	}
 

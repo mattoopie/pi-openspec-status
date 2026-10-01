@@ -9,7 +9,7 @@ A [pi](https://pi.dev) coding agent extension that displays the active OpenSpec 
 
 - **Persistent TUI widget** — always visible above the editor in interactive mode, automatically suppressed in non-interactive modes (`-p`, `--json`, headless RPC)
 - **Single-change detailed view** — when one active change exists, shows the change name, schema, per-artifact status (proposal, design, specs, tasks), and a task progress bar with apply dependency hints
-- **Multi-change overview** — when multiple active changes exist, shows a header with the active count followed by one condensed line per change with artifact initials, task counters, and blocked-dependency hints
+- **Multi-change overview** — when multiple active changes exist, shows a header with the active count followed by one condensed line per change with aligned change names, artifact labels, task counters, and blocked-dependency hints
 - **Artifact status indicators** — uses filled circle (●) for done, open circle (○) for ready, and dotted circle (◌) for blocked, each colored with theme-aware success/muted/warning colors
 - **Interactive dialog** — press `Ctrl+Alt+O` to open a scrollable dialog with full change details, task breakdowns, and dependency info
 - **Automatic data refresh** — event-driven refreshes fetch from the `openspec` CLI on session start, after each agent turn/end (debounced 500ms), and when tools write to `openspec/` or bash commands reference openspec; a bounded fallback safety poll starts at 30 seconds and backs off to at most 120 seconds when unchanged
@@ -106,7 +106,9 @@ OpenSpec (2 active)
 ```
 
 - **Header:** "OpenSpec (N active)" in accent color
-- **Per change (one line):** Status icon, truncated change name, artifact initials (`P`=proposal, `D`=design, `S`=specs, `T`=tasks) each with a status icon, task counter (completed/total), and a blocked-dependency hint when applicable
+- **Per change (one line):** Status icon, truncated change name in a compact padded column (sized to the longest displayed name, capped at 35% of the width), artifact labels (`P`=proposal, `D`=design, `S`=specs, `T`=tasks) each with a status icon, task counter (completed/total), and a blocked-dependency hint when applicable. Full artifact names are used when they fit on every row; otherwise all rows use initials.
+
+When stdout does not report a usable terminal width, the widget uses `PI_OPENSPEC_STATUS_WIDTH` if set to a positive integer, or defaults to 120 columns. Set the environment variable to the target width when running pi behind a web/RPC client; the extension does not receive the browser viewport width automatically.
 
 #### Error states
 
