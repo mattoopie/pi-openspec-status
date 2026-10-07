@@ -11,7 +11,7 @@
   "license": "MIT",
   "author": "Mattoopie <mattoopie@users.noreply.github.com>",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.19.0"
   },
   "files": [
     "extension/"
@@ -33,5 +33,11 @@
       "./extension/index.ts"
     ],
     "image": "https://raw.githubusercontent.com/mattoopie/pi-openspec-status/main/assets/overlay.png"
+  },
+  "dependencies": {
+    "cross-spawn": "^7.0.6"
+  },
+  "devDependencies": {
+    "@types/cross-spawn": "^6.0.6"
   }
 }

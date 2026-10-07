@@ -69,6 +69,8 @@ This is useful when the compact widget above the editor doesn't show enough deta
 
 ### Requirements
 
+On Windows, the extension first tries Pi's normal command execution. If that fails, it retries through `cross-spawn` to support npm's Windows launchers. A successful fallback is cached per Pi API instance and reused for availability checks and list/status commands. Both launchers resolve `openspec` from the inherited environment; the extension does not locate a JavaScript entry point or explicitly run OpenSpec through Node.
+
 - A project using [OpenSpec](https://github.com/fission-ai/openspec) with changes in `openspec/changes/`
 - Each change directory may contain:
   - `.openspec.yaml` — with a `schema` field (optional, defaults to `"spec-driven"`)

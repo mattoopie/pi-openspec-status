@@ -391,7 +391,7 @@ export default function (pi: ExtensionAPI) {
 		// Do CLI check and initial data fetch asynchronously so pi can
 		// navigate to the session immediately without waiting for results.
 		(async () => {
-			const cliResult = await checkCliAvailable(pi);
+			const cliResult = await checkCliAvailable(pi, ctx.cwd);
 			// Bail if the session was replaced while awaiting the CLI check
 			if (isShutdown || sessionGeneration !== gen) return;
 

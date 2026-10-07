@@ -8,6 +8,7 @@ import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { ChangeSummary, ChangeDetail, TaskGroup } from "./types.ts";
 import { parseTaskGroups } from "./tasks-parser.ts";
+import { execOpenSpec } from "./cli.ts";
 
 /**
  * Result of a CLI availability check.
@@ -106,10 +107,11 @@ export function resetOpenSpecDir(cwd?: string): void {
 /**
  * Check if the `openspec` CLI is available on PATH.
  */
-export async function checkCliAvailable(pi: ExtensionAPI): Promise<CliCheckResult> {
+export async function checkCliAvailable(pi: ExtensionAPI, cwd?: string): Promise<CliCheckResult> {
 	try {
-		const result = await pi.exec("openspec", ["--help"], {
+		const result = await execOpenSpec(pi, ["--version"], {
 			timeout: 5000,
+			cwd,
 		});
 		if (result.code !== 0) {
 			return { available: false, reason: result.stderr?.trim() || "CLI returned non-zero exit code" };
@@ -135,7 +137,7 @@ async function execOpenSpecJson<T>(
 	cwd: string,
 ): Promise<{ data: T | null; error: string | null }> {
 	try {
-		const result = await pi.exec("openspec", args, {
+		const result = await execOpenSpec(pi, args, {
 			timeout: 10000,
 			cwd,
 		});
