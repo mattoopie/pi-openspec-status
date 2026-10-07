@@ -3,7 +3,7 @@
  * Provides CLI execution wrapper, list/status fetching, and error handling.
  */
 
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { ChangeSummary, ChangeDetail, TaskGroup } from "./types.ts";
@@ -25,6 +25,15 @@ export interface CliCheckResult {
  */
 const _openSpecDirs = new Map<string, Promise<string | null>>();
 
+async function hasOpenSpecChanges(root: string): Promise<boolean> {
+	try {
+		return (await stat(join(root, "openspec", "changes"))).isDirectory();
+	} catch {
+		// Missing or inaccessible directories are not OpenSpec projects.
+		return false;
+	}
+}
+
 /**
  * Resolve the OpenSpec project root directory by checking:
  * 1. Current working directory (fast path)
@@ -39,13 +48,8 @@ const _openSpecDirs = new Map<string, Promise<string | null>>();
  */
 export async function resolveOpenSpecDir(pi: ExtensionAPI, cwd: string): Promise<string | null> {
 	// Step 1: Check the Pi session working directory, not the server process cwd.
-	try {
-		const cwdResult = await pi.exec("test", ["-d", "openspec/changes"], { timeout: 5000, cwd });
-		if (cwdResult.code === 0) {
-			return cwd;
-		}
-	} catch {
-		// test command failed (unlikely), continue to git fallback
+	if (await hasOpenSpecChanges(cwd)) {
+		return cwd;
 	}
 
 	// Step 2: Git root fallback
@@ -55,8 +59,7 @@ export async function resolveOpenSpecDir(pi: ExtensionAPI, cwd: string): Promise
 			const gitRoot = gitResult.stdout?.trim();
 			if (gitRoot) {
 				// Validate that openspec/changes exists at the git root
-				const gitCheckResult = await pi.exec("test", ["-d", "openspec/changes"], { timeout: 5000, cwd: gitRoot });
-				if (gitCheckResult.code === 0) {
+				if (await hasOpenSpecChanges(gitRoot)) {
 					return gitRoot;
 				}
 			}
