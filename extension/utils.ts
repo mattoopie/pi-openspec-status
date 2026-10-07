@@ -3,6 +3,23 @@
  */
 
 /**
+ * Recognize tools that may have changed OpenSpec state.
+ * Normalize separators explicitly so Windows paths also work on Unix hosts.
+ */
+export function isOpenSpecRelated(toolName: string, input: Record<string, unknown>): boolean {
+	if (toolName === "write" || toolName === "edit") {
+		if (typeof input.path === "string") {
+			const path = input.path.replace(/\\/g, "/");
+			return path.startsWith("openspec/") || path.includes("/openspec/");
+		}
+	}
+	if (toolName === "bash" || toolName === "powershell") {
+		return typeof input.command === "string" && input.command.includes("openspec");
+	}
+	return false;
+}
+
+/**
  * Create a debounced version of a function.
  * The debounced function is called after `delay` ms of inactivity.
  */

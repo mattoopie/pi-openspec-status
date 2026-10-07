@@ -19,7 +19,7 @@ import {
 } from "./openspec.ts";
 import { renderWidget } from "./widget.ts";
 import { registerInteractionShortcut } from "./interaction.ts";
-import { debounce, arraysEqual } from "./utils.ts";
+import { debounce, arraysEqual, isOpenSpecRelated } from "./utils.ts";
 
 export default function (pi: ExtensionAPI) {
 	// ── State ──────────────────────────────────────────────────────────
@@ -350,23 +350,6 @@ export default function (pi: ExtensionAPI) {
 	): void {
 		pendingEventBackoffReset ||= resetBackoff;
 		debouncedRefresh(ctx);
-	}
-
-	// ── Tool result handler: check for openspec-related changes ───────
-	function isOpenSpecRelated(toolName: string, input: Record<string, unknown>): boolean {
-		if (toolName === "write" || toolName === "edit") {
-			const path = input.path as string | undefined;
-			if (path && (path.startsWith("openspec/") || path.includes("/openspec/"))) {
-				return true;
-			}
-		}
-		if (toolName === "bash") {
-			const command = input.command as string | undefined;
-			if (command && command.includes("openspec")) {
-				return true;
-			}
-		}
-		return false;
 	}
 
 	// ── Event handlers ────────────────────────────────────────────────
