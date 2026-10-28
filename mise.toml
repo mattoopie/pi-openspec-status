@@ -1,4 +1,4 @@
 [tools]
 node = "24"
-"npm:@fission-ai/openspec" = "1.14.1"
-"npm:@earendil-works/pi-coding-agent" = "1.0.4"
+"npm:@fission-ai/openspec" = "1.15.0"
+"npm:@earendil-works/pi-coding-agent" = "1.4.0"
