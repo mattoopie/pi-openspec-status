@@ -56,7 +56,7 @@ export function registerInteractionShortcut(pi: ExtensionAPI): void {
 			// Detect verify command availability via pi.getCommands()
 			const commands = pi.getCommands();
 			const hasVerify = commands.some(
-				(c) => c.source === "skill" && c.name.includes("openspec-verify"),
+				(c) => c.source === "skill" && c.name === "skill:openspec-verify-change",
 			);
 
 			// Open the change list overlay
@@ -80,19 +80,19 @@ export function registerInteractionShortcut(pi: ExtensionAPI): void {
 
 			switch (actionResult.type) {
 				case "apply":
-					ctx.ui.setEditorText(`/opsx-apply ${actionResult.changeName}`);
+					ctx.ui.setEditorText(`/skill:openspec-apply-change ${actionResult.changeName}`);
 					break;
 				case "explore":
-					ctx.ui.setEditorText(`/opsx-explore ${actionResult.changeName}`);
+					ctx.ui.setEditorText(`/skill:openspec-explore ${actionResult.changeName}`);
 					break;
 				case "archive":
-					ctx.ui.setEditorText(`/opsx-archive ${actionResult.changeName}`);
+					ctx.ui.setEditorText(`/skill:openspec-archive-change ${actionResult.changeName}`);
 					break;
 				case "verify":
-					ctx.ui.setEditorText(`/opsx-verify ${actionResult.changeName}`);
+					ctx.ui.setEditorText(`/skill:openspec-verify-change ${actionResult.changeName}`);
 					break;
 				case "propose":
-					ctx.ui.setEditorText("/opsx-propose ");
+					ctx.ui.setEditorText("/skill:openspec-propose ");
 					break;
 				case "cancel":
 					// No editor change, just close

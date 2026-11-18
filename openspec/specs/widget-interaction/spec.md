@@ -64,38 +64,38 @@ The overlay SHALL display a preview pane showing detailed information about the 
 - **THEN** the preview pane updates to show details for the newly selected change
 
 ### Requirement: Letter key actions on selected change
-The user SHALL trigger OpenSpec prompt templates by pressing a single letter key while the overlay is open. The verify action key SHALL only be active when the `opsx-verify` command is registered in the current pi session (detected via `pi.getCommands()`).
+The user SHALL invoke OpenSpec skills by pressing a single letter key while the overlay is open. The verify action key SHALL only be active when the `skill:openspec-verify-change` skill command is registered in the current pi session (detected via `pi.getCommands()`).
 
 #### Scenario: Apply action on selected change
 - **WHEN** the user presses `a` while a change is selected
-- **THEN** the overlay closes and the editor is pre-filled with `/opsx-apply <change-name>`
+- **THEN** the overlay closes and the editor is pre-filled with `/skill:openspec-apply-change <change-name>`
 
 #### Scenario: Verify action on selected change when available
-- **WHEN** the user presses `v` while a change is selected AND `opsx-verify` is registered via `pi.getCommands()`
-- **THEN** the overlay closes and the editor is pre-filled with `/opsx-verify <change-name>`
+- **WHEN** the user presses `v` while a change is selected AND `skill:openspec-verify-change` is registered via `pi.getCommands()`
+- **THEN** the overlay closes and the editor is pre-filled with `/skill:openspec-verify-change <change-name>`
 
 #### Scenario: Verify key ignored when not available
-- **WHEN** the user presses `v` while a change is selected AND `opsx-verify` is NOT registered
+- **WHEN** the user presses `v` while a change is selected AND `skill:openspec-verify-change` is NOT registered
 - **THEN** the keypress is ignored (no action taken, overlay remains open)
 
 #### Scenario: Explore action on selected change
 - **WHEN** the user presses `e` while a change is selected
-- **THEN** the overlay closes and the editor is pre-filled with `/opsx-explore <change-name>`
+- **THEN** the overlay closes and the editor is pre-filled with `/skill:openspec-explore <change-name>`
 
 #### Scenario: Archive action on selected change
 - **WHEN** the user presses `c` while a change is selected
-- **THEN** the overlay closes and the editor is pre-filled with `/opsx-archive <change-name>`
+- **THEN** the overlay closes and the editor is pre-filled with `/skill:openspec-archive-change <change-name>`
 
 ### Requirement: Propose action always available
 The propose action SHALL be available regardless of whether a change is selected or whether any changes exist.
 
 #### Scenario: Propose with no active changes
 - **WHEN** the user presses `p` while the overlay shows the empty state
-- **THEN** the overlay closes and the editor is pre-filled with `/opsx-propose ` (blank change name, cursor positioned for the user to type)
+- **THEN** the overlay closes and the editor is pre-filled with `/skill:openspec-propose ` (blank change name, cursor positioned for the user to type)
 
 #### Scenario: Propose with active changes
 - **WHEN** the user presses `p` while a change is selected
-- **THEN** the overlay closes and the editor is pre-filled with `/opsx-propose ` (blank, ignoring the current selection)
+- **THEN** the overlay closes and the editor is pre-filled with `/skill:openspec-propose ` (blank, ignoring the current selection)
 
 ### Requirement: Escape cancels overlay
 The user SHALL dismiss the overlay without taking any action by pressing `escape`.
@@ -115,14 +115,14 @@ After triggering an action, the overlay SHALL close and keyboard focus SHALL ret
 - **AND** the editor contains the pre-filled prompt template text
 
 ### Requirement: Action hints displayed
-The overlay SHALL display a hint bar showing available action keys and their functions. The verify hint SHALL only appear when the `opsx-verify` command is registered (detected via `pi.getCommands()`).
+The overlay SHALL display a hint bar showing available action keys and their functions. The verify hint SHALL only appear when the `skill:openspec-verify-change` skill command is registered (detected via `pi.getCommands()`).
 
 #### Scenario: Full hint bar with changes (verify available)
-- **WHEN** the overlay is open, active changes exist, AND `opsx-verify` is registered
+- **WHEN** the overlay is open, active changes exist, AND `skill:openspec-verify-change` is registered
 - **THEN** the hint bar shows "a apply · v verify · e explore · c archive · p propose new · esc cancel"
 
 #### Scenario: Full hint bar with changes (verify unavailable)
-- **WHEN** the overlay is open, active changes exist, AND `opsx-verify` is NOT registered
+- **WHEN** the overlay is open, active changes exist, AND `skill:openspec-verify-change` is NOT registered
 - **THEN** the hint bar shows "a apply · e explore · c archive · p propose new · esc cancel"
 
 #### Scenario: Empty state hint bar
