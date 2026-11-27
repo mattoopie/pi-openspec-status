@@ -25,6 +25,10 @@ A [pi](https://pi.dev) coding agent extension that displays the active OpenSpec 
 
 *Interactive overlay dialog showing detailed change breakdown and dependencies*
 
+## Host compatibility
+
+Requires a coding-agent host that provides `@oh-my-pi/pi-coding-agent` (for example [omp](https://github.com/can1357/oh-my-pi)). This release does not import `@oh-my-pi/pi-tui` so it loads under omp’s extension resolver; older releases that imported `@earendil-works/pi-tui` fail on current omp.
+
 ## Install
 
 ### From npm (recommended)
@@ -38,6 +42,16 @@ Or with a specific version:
 ```bash
 pi install npm:pi-openspec-status@1.0.0
 ```
+
+### Local development (omp `plugin install <path>`)
+
+Linked checkouts do not install dependencies automatically. From the package root:
+
+```bash
+npm install
+```
+
+Without that, extension load fails with `Cannot find package 'cross-spawn'`.
 
 ### From GitHub
 

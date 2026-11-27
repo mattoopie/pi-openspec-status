@@ -1,4 +1,4 @@
 [tools]
 node = "24"
 "npm:@fission-ai/openspec" = "2.1.0"
-"npm:@earendil-works/pi-coding-agent" = "1.5.2"
+"npm:@oh-my-pi/pi-coding-agent" = "latest"
