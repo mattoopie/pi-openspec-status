@@ -6,14 +6,17 @@
  *
  * Dependencies:
  *   - render-utils.ts for shared rendering primitives
- *   - @oh-my-pi/pi-tui for input handling and text utilities
+ *   - terminal-text.ts for width helpers
+ *   - tui-keys.ts for overlay key matching
  */
 
 import type { Theme } from "@oh-my-pi/pi-coding-agent";
-import { Key, matchesKey } from "@oh-my-pi/pi-tui";
-import type { TUI } from "@oh-my-pi/pi-tui/tui";
-import { truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui/utils";
+import { truncateToWidth, visibleWidth } from "./terminal-text.ts";
+import { matchesKey, NavKey } from "./tui-keys.ts";
 import type { ChangeSummary, ChangeDetail, TaskGroup, OverlayAction } from "./types.ts";
+
+/** Rows `ctx.ui.custom` passes into overlay factories. */
+type OverlayTui = { requestRender(): void };
 import {
 	changeStatusIcon,
 	renderArtifactPart,
@@ -58,12 +61,12 @@ export class OpenSpecOverlay {
 	// ── Input handling ───────────────────────────────────────────────────────
 
 	handleInput(data: string): void {
-		if (matchesKey(data, Key.up)) {
+		if (matchesKey(data, NavKey.up)) {
 			if (this.changes.length > 1 && this.selectedIndex > 0) {
 				this.selectedIndex--;
 				this.invalidate();
 			}
-		} else if (matchesKey(data, Key.down)) {
+		} else if (matchesKey(data, NavKey.down)) {
 			if (this.changes.length > 1 && this.selectedIndex < this.changes.length - 1) {
 				this.selectedIndex++;
 				this.invalidate();
@@ -78,7 +81,7 @@ export class OpenSpecOverlay {
 			this.onAction({ type: "archive", changeName: this.changes[this.selectedIndex]!.name });
 		} else if (data === "p") {
 			this.onAction({ type: "propose" });
-		} else if (matchesKey(data, Key.escape)) {
+		} else if (matchesKey(data, NavKey.escape)) {
 			this.onAction({ type: "cancel" });
 		}
 	}
@@ -280,7 +283,7 @@ export class OpenSpecOverlay {
  * that match the OpenSpecOverlay visual style.
  */
 export class LoadingOverlay {
-	private tui: TUI;
+	private tui: OverlayTui;
 	private theme: Theme;
 	private message: string;
 	private frame = 0;
@@ -298,7 +301,7 @@ export class LoadingOverlay {
 		this.onAbortCb = fn;
 	}
 
-	constructor(tui: TUI, theme: Theme, message: string) {
+	constructor(tui: OverlayTui, theme: Theme, message: string) {
 		this.tui = tui;
 		this.theme = theme;
 		this.message = message;
@@ -315,7 +318,7 @@ export class LoadingOverlay {
 	}
 
 	handleInput(data: string): void {
-		if (matchesKey(data, Key.escape)) {
+		if (matchesKey(data, NavKey.escape)) {
 			this.abortController.abort();
 			this.onAbortCb?.();
 		}

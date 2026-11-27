@@ -8,7 +8,7 @@
 
 import type { ChangeSummary, ChangeDetail } from "./types.ts";
 import type { Theme } from "@oh-my-pi/pi-coding-agent";
-import { truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui/utils";
+import { truncateToWidth, visibleWidth } from "./terminal-text.ts";
 import {
 	changeStatusIcon,
 	renderArtifactPart,

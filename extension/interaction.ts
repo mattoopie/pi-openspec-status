@@ -7,7 +7,6 @@
  */
 
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
-import { Key } from "@oh-my-pi/pi-tui";
 import type { ChangeSummary, ChangeDetail, OverlayAction } from "./types.ts";
 import { fetchActiveChanges } from "./openspec.ts";
 import { LoadingOverlay, OpenSpecOverlay } from "./overlay.ts";
@@ -16,7 +15,7 @@ import { LoadingOverlay, OpenSpecOverlay } from "./overlay.ts";
  * Register the ctrl+alt+o shortcut that opens the interactive overlay.
  */
 export function registerInteractionShortcut(pi: ExtensionAPI): void {
-	pi.registerShortcut(Key.ctrlAlt("o"), {
+	pi.registerShortcut("ctrl+alt+o", {
 		description: "Open OpenSpec change list overlay",
 		handler: async (ctx) => {
 			// Idle check
