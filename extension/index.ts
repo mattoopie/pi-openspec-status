@@ -8,7 +8,7 @@
  *   openspec CLI -> openspec.ts (data layer) -> index.ts (state + events) -> widget.ts (render)
  */
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import type { WidgetState } from "./types.ts";
 import {
 	checkCliAvailable,
@@ -50,7 +50,7 @@ export default function (pi: ExtensionAPI) {
 
 	type RefreshSource = "initial" | "event" | "fallback";
 	interface RefreshRequest {
-		ctx: import("@earendil-works/pi-coding-agent").ExtensionContext;
+		ctx: import("@oh-my-pi/pi-coding-agent").ExtensionContext;
 		gen: number;
 		source: RefreshSource;
 		resetBackoff: boolean;
@@ -110,7 +110,7 @@ export default function (pi: ExtensionAPI) {
 	 * operation; all callers must use requestRefresh() below.
 	 */
 	async function refresh(
-		ctx: import("@earendil-works/pi-coding-agent").ExtensionContext,
+		ctx: import("@oh-my-pi/pi-coding-agent").ExtensionContext,
 		gen: number,
 	): Promise<RefreshOutcome> {
 		if (!isCurrentGeneration(gen) || !ctx.hasUI) {
@@ -267,7 +267,7 @@ export default function (pi: ExtensionAPI) {
 	 * refresh coordinator.
 	 */
 	function scheduleFallback(
-		ctx: import("@earendil-works/pi-coding-agent").ExtensionContext,
+		ctx: import("@oh-my-pi/pi-coding-agent").ExtensionContext,
 		gen: number,
 	): void {
 		if (fallbackTimeout) clearTimeout(fallbackTimeout);
@@ -302,7 +302,7 @@ export default function (pi: ExtensionAPI) {
 	/**
 	 * Render the widget and update the TUI if content changed.
 	 */
-	function updateWidget(ctx: import("@earendil-works/pi-coding-agent").ExtensionContext): void {
+	function updateWidget(ctx: import("@oh-my-pi/pi-coding-agent").ExtensionContext): void {
 		if (!ctx.hasUI) return;
 
 		const theme = ctx.ui.theme;
@@ -325,7 +325,7 @@ export default function (pi: ExtensionAPI) {
 	// tool_result is not accidentally overwritten by a later turn_end event.
 	let pendingEventBackoffReset = false;
 	const debouncedRefresh = debounce(
-		(ctx: import("@earendil-works/pi-coding-agent").ExtensionContext) => {
+		(ctx: import("@oh-my-pi/pi-coding-agent").ExtensionContext) => {
 			const resetBackoff = pendingEventBackoffReset;
 			pendingEventBackoffReset = false;
 			const gen = sessionGeneration;
@@ -345,7 +345,7 @@ export default function (pi: ExtensionAPI) {
 	);
 
 	function queueDebouncedRefresh(
-		ctx: import("@earendil-works/pi-coding-agent").ExtensionContext,
+		ctx: import("@oh-my-pi/pi-coding-agent").ExtensionContext,
 		resetBackoff = false,
 	): void {
 		pendingEventBackoffReset ||= resetBackoff;

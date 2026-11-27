@@ -5,7 +5,7 @@
  * All functions take a Theme as their first parameter for consistency.
  */
 
-import type { Theme } from "@earendil-works/pi-coding-agent";
+import type { Theme } from "@oh-my-pi/pi-coding-agent";
 import type { ChangeSummary, ChangeDetail } from "./types.ts";
 
 /** Max progress bar width in characters */

@@ -6,11 +6,13 @@
  *
  * Dependencies:
  *   - render-utils.ts for shared rendering primitives
- *   - @earendil-works/pi-tui for input handling and text utilities
+ *   - @oh-my-pi/pi-tui for input handling and text utilities
  */
 
-import type { Theme } from "@earendil-works/pi-coding-agent";
-import { matchesKey, Key, truncateToWidth, visibleWidth, type TUI } from "@earendil-works/pi-tui";
+import type { Theme } from "@oh-my-pi/pi-coding-agent";
+import { Key, matchesKey } from "@oh-my-pi/pi-tui";
+import type { TUI } from "@oh-my-pi/pi-tui/tui";
+import { truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui/utils";
 import type { ChangeSummary, ChangeDetail, TaskGroup, OverlayAction } from "./types.ts";
 import {
 	changeStatusIcon,

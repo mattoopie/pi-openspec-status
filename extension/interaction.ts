@@ -6,8 +6,8 @@
  * change list overlay → action dispatch back to the editor.
  */
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Key } from "@earendil-works/pi-tui";
+import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
+import { Key } from "@oh-my-pi/pi-tui";
 import type { ChangeSummary, ChangeDetail, OverlayAction } from "./types.ts";
 import { fetchActiveChanges } from "./openspec.ts";
 import { LoadingOverlay, OpenSpecOverlay } from "./overlay.ts";

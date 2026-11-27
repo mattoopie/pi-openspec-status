@@ -7,8 +7,8 @@
  */
 
 import type { ChangeSummary, ChangeDetail } from "./types.ts";
-import type { Theme } from "@earendil-works/pi-coding-agent";
-import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import type { Theme } from "@oh-my-pi/pi-coding-agent";
+import { truncateToWidth, visibleWidth } from "@oh-my-pi/pi-tui/utils";
 import {
 	changeStatusIcon,
 	renderArtifactPart,

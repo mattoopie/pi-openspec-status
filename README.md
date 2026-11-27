@@ -25,6 +25,10 @@ A [pi](https://pi.dev) coding agent extension that displays the active OpenSpec 
 
 *Interactive overlay dialog showing detailed change breakdown and dependencies*
 
+## Host compatibility
+
+Requires a coding-agent host that provides `@oh-my-pi/pi-coding-agent` and `@oh-my-pi/pi-tui` (for example [omp](https://github.com/can1357/oh-my-pi)). Extension modules must import those package names; hosts that no longer shim `@earendil-works/pi-tui` will refuse to load older import paths.
+
 ## Install
 
 ### From npm (recommended)

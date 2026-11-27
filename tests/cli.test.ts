@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { createOpenSpecExecutor, crossSpawnExec, execOpenSpec } from "../extension/cli.ts";
 import { checkCliAvailable, getChangeStatus, listChanges, resetOpenSpecDir } from "../extension/openspec.ts";
 

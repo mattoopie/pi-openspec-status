@@ -5,7 +5,7 @@
 
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import type { ChangeSummary, ChangeDetail, TaskGroup } from "./types.ts";
 import { parseTaskGroups } from "./tasks-parser.ts";
 import { execOpenSpec } from "./cli.ts";
